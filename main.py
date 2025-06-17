@@ -1,100 +1,106 @@
-from flask import Flask, request
-import requests
-import datetime
 import os
+import requests
+from flask import Flask, request
+from telegram import Bot
+from telegram.constants import ParseMode
+from datetime import datetime, timedelta
 
 app = Flask(name)
+bot = Bot(token=os.environ["BOT_TOKEN"])
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+CITY_NAME = "Гайсин"
+LATITUDE = 48.8125
+LONGITUDE = 29.3903
+TIMEZONE = "Europe/Kyiv"
 
-# Геокоординати Гайсина
-LAT = 48.8122
-LON = 29.3892
+def get_weather_forecast():
+    url = (
+        "https://api.open-meteo.com/v1/forecast"
+        f"?latitude={LATITUDE}&longitude={LONGITUDE}"
+        f"&daily=temperature_2m_max,temperature_2m_min,precipitation_hours"
+        f"&hourly=wind_speed_10m,apparent_temperature,precipitation"
+        f"&timezone={TIMEZONE}"
+    )
 
-@app.route("/")
-def home():
-    return "Bot is running."
+    response = requests.get(url)
+    data = response.json()
 
-@app.route("/send_weather", methods=["GET"])
-def send_weather():
-    try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={LAT}&longitude={LON}&daily=weathercode,temperature_2m_min,temperature_2m_max,apparent_temperature_min,apparent_temperature_max,precipitation_sum,windspeed_10m_max&timezone=Europe%2FKyiv"
-        response = requests.get(url)
-        data = response.json()
+    forecast_text = f"🌤️ Прогноз погоди на 3 дні для {CITY_NAME}:\n\n"
 
-        if "daily" not in data:
-            return "❌ Помилка: немає даних daily."
+    today = datetime.now().date()
+    hourly_times = data["hourly"]["time"]
+    hourly_wind = data["hourly"]["wind_speed_10m"]
+    hourly_precip = data["hourly"]["precipitation"]
+    hourly_apparent = data["hourly"]["apparent_temperature"]
 
-        daily = data["daily"]
-        days = []
+    for i in range(3):
+        date = today + timedelta(days=i)
+        day_str = date.strftime("%d.%m.%Y")
 
-        for i in range(3):
-            date = daily["time"][i]
-            weather_code = daily["weathercode"][i]
-            temp_min = daily["temperature_2m_min"][i]
-            temp_max = daily["temperature_2m_max"][i]
-            app_temp_min = daily["apparent_temperature_min"][i]
-            app_temp_max = daily["apparent_temperature_max"][i]
-            wind = daily["windspeed_10m_max"][i]
-            rain = daily["precipitation_sum"][i]
+        max_temp = data["daily"]["temperature_2m_max"][i]
+        min_temp = data["daily"]["temperature_2m_min"][i]
+        precipitation_hours = data["daily"]["precipitation_hours"][i]
 
-            desc = get_weather_description(weather_code)
-            frost_note = ""
-            if temp_min <= -5:
-                frost_note = f" 🧊 Мороз. Відчувається як {app_temp_min}°C."
+        temp_info = f"🌡️ Вдень до {max_temp:.1f}°C, вночі {min_temp:.1f}°C"
+        if min_temp <= -5:
+            index = data["hourly"]["time"].index(f"{date}T00:00")
+            feels_like = hourly_apparent[index]
+            temp_info += f" (мороз, відчувається як {feels_like:.1f}°C)"
 
-            rain_note = ""
-            if rain > 0:
-                rain_note = f" 🌧️ Дощ: {rain} мм."
+        # Дощ
+        rain_hours = []
+        for j, hour in enumerate(hourly_times):
+            if hour.startswith(str(date)) and hourly_precip[j] > 0:
+                rain_hours.append(hour[11:16])
+        if rain_hours:
+            start = rain_hours[0]
+            end = rain_hours[-1]
+            rain_info = f"🌧️ Дощ: з {start} до {end}"
+        else:
+            rain_info = "☀️ Дощ не очікується"
 
-            wind_note = ""
-            if wind > 4:
-                part = get_day_period(i)
-                wind_note = f" 💨 Сильний вітер {part}."
+        # Вітер
+        strong_wind_hours = []
+        for j, hour in enumerate(hourly_times):
+            if hour.startswith(str(date)) and hourly_wind[j] > 4:
+                strong_wind_hours.append(int(hour[11:13]))
 
-            day_report = f"📅 {date}:\n{desc}, 🌡️ вдень до {temp_max}°C, 🌙 вночі до {temp_min}°C.{frost_note}{rain_note}{wind_note}"
-            days.append(day_report)
+        wind_info = ""
+        if strong_wind_hours:
+            if any(6 <= h <= 11 for h in strong_wind_hours):
+                wind_info = "💨 Вдень — сильний вітер"
+            elif any(12 <= h <= 17 for h in strong_wind_hours):
+                wind_info = "💨 Ввечері — сильний вітер"
+            else:
+                wind_info = "💨 Вночі — сильний вітер"
 
-        final_message = f"🌤️ Прогноз погоди на 3 дні для Гайсина:\n\n" + "\n\n".join(days)
+        forecast_text += (
+            f"<b>{day_str}</b>\n"
+            f"{temp_info}\n"
+            f"{rain_info}\n"
+            f"{wind_info}\n\n"
+        )
 
-        send_telegram(final_message)
-        return "✅ Прогноз надіслано!"
+    return forecast_text.strip()
 
-    except Exception as e:
-        return f"❌ Помилка: {str(e)}"
+@app.route("/", methods=["GET"])
+def index():
+    return "Бот працює!"
 
-def send_telegram(text):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": text
-    }
-    requests.post(url, data=payload)
+@app.route("/", methods=["POST"])
+def webhook():
+    update = request.get_json()
 
-def get_weather_description(code):
-    weather_map = {
-        0: "☀️ Ясно",
-        1: "🌤️ Переважно ясно",
-        2: "⛅ Мінлива хмарність",
-        3: "☁️ Хмарно",
-        45: "🌫️ Туман",
-        48: "🌫️ Іній",
-        51: "🌦️ Легкий дощ",
-        61: "🌧️ Дощ",
-        71: "🌨️ Сніг",
-        95: "⛈️ Гроза"
-    }
-    return weather_map.get(code, "🌡️ Невідома погода")
+    if "message" in update and "text" in update["message"]:
+        chat_id = update["message"]["chat"]["id"]
+        text = update["message"]["text"]
 
-def get_day_period(day_index):
-    if day_index == 0:
-        return "сьогодні"
-    elif day_index == 1:
-        return "завтра"
-    else:
-        return "післязавтра"
+        if text.lower() in ["/start", "/weather", "погода"]:
+            forecast = get_weather_forecast()
+            bot.send_message(chat_id=chat_id, text=forecast, parse_mode=ParseMode.HTML)
 
-if __name__ == "__main__":
-port = int(oc.environ.get("PORT", 10000))
+    return "ok"
+
+if name == "main":
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
