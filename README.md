@@ -1,0 +1,1 @@
+# gaysyn-weather-bot
