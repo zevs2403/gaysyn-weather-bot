@@ -95,6 +95,6 @@ def get_day_period(day_index):
     else:
         return "післязавтра"
 
-if__name__ == "__main__":
+if __name__ == "__main__":
 port = int(oc.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
