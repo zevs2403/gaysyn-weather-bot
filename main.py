@@ -5,7 +5,7 @@ from telegram import Bot
 from telegram.constants import ParseMode
 from datetime import datetime, timedelta
 
-app = Flask(name)
+app = Flask(__name__)
 bot = Bot(token=os.environ["BOT_TOKEN"])
 
 CITY_NAME = "Гайсин"
@@ -101,6 +101,6 @@ def webhook():
 
     return "ok"
 
-if name == "main":
+if name == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
