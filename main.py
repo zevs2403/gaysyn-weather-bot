@@ -1,12 +1,12 @@
 import os
-import asyncio
 import requests
 from flask import Flask, request
 from telegram import Bot
 from telegram.constants import ParseMode
 from datetime import datetime, timedelta
+import asyncio
 
-app = Flask(__name__)
+app = Flask(name)
 bot = Bot(token=os.environ["BOT_TOKEN"])
 
 CITY_NAME = "Гайсин"
@@ -48,24 +48,16 @@ def get_weather_forecast():
             feels_like = hourly_apparent[index]
             temp_info += f" (мороз, відчувається як {feels_like:.1f}°C)"
 
-        # Дощ
-        rain_hours = []
-        for j, hour in enumerate(hourly_times):
-            if hour.startswith(str(date)) and hourly_precip[j] > 0:
-                rain_hours.append(hour[11:16])
-        if rain_hours:
-            start = rain_hours[0]
-            end = rain_hours[-1]
-            rain_info = f"🌧️ Дощ: з {start} до {end}"
-        else:
-            rain_info = "☀️ Дощ не очікується"
+        rain_hours = [
+            hour[11:16] for j, hour in enumerate(hourly_times)
+            if hour.startswith(str(date)) and hourly_precip[j] > 0
+        ]
+        rain_info = f"🌧️ Дощ: з {rain_hours[0]} до {rain_hours[-1]}" if rain_hours else "☀️ Дощ не очікується"
 
-        # Вітер
-        strong_wind_hours = []
-        for j, hour in enumerate(hourly_times):
-            if hour.startswith(str(date)) and hourly_wind[j] > 4:
-                strong_wind_hours.append(int(hour[11:13]))
-
+        strong_wind_hours = [
+            int(hour[11:13]) for j, hour in enumerate(hourly_times)
+            if hour.startswith(str(date)) and hourly_wind[j] > 4
+        ]
         wind_info = ""
         if strong_wind_hours:
             if any(6 <= h <= 11 for h in strong_wind_hours):
@@ -89,10 +81,10 @@ def index():
     return "Бот працює!"
 
 @app.route("/", methods=["POST"])
-async def webhook():
+def webhook():
     update = request.get_json()
 
-    print("Отримано POST-запит:")
+    print("⬇️ Отримано POST-запит:")
     print(update)
 
     if "message" in update and "text" in update["message"]:
@@ -101,10 +93,10 @@ async def webhook():
 
         if text.lower() in ["/start", "/weather", "погода"]:
             forecast = get_weather_forecast()
-            await bot.send_message(chat_id=chat_id, text=forecast, parse_mode=ParseMode.HTML)
+            asyncio.run(bot.send_message(chat_id=chat_id, text=forecast, parse_mode=ParseMode.HTML))
 
     return "ok"
 
-if __name__ == "__main__":
+if name == "main":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
