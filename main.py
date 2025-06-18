@@ -43,7 +43,7 @@ def get_weather_forecast():
 
         temp_info = f"🌡️ Вдень до {max_temp:.1f}°C, вночі {min_temp:.1f}°C"
         if min_temp <= -5:
-            index = hourly_times.index(f"{date}T00:00")
+            index = data["hourly"]["time"].index(f"{date}T00:00")
             feels_like = hourly_apparent[index]
             temp_info += f" (мороз, відчувається як {feels_like:.1f}°C)"
 
@@ -90,21 +90,21 @@ def index():
 @app.route("/", methods=["POST"])
 def webhook():
     update = request.get_json()
-    print("Отримано оновлення:", update)  # логування в консоль
+
+    # 🔎 Вивід у консоль для дебагу
+    print("Отримано POST-запит:")
+    print(update)
 
     if "message" in update and "text" in update["message"]:
         chat_id = update["message"]["chat"]["id"]
         text = update["message"]["text"]
-        print(f"Користувач написав: {text}")
 
         if text.lower() in ["/start", "/weather", "погода"]:
             forecast = get_weather_forecast()
             bot.send_message(chat_id=chat_id, text=forecast, parse_mode=ParseMode.HTML)
-        else:
-            bot.send_message(chat_id=chat_id, text="Надішли команду /weather або напиши 'погода' ☁️")
 
     return "ok"
 
-if __name__ == "__main__":
+if name == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
