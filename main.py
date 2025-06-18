@@ -3,10 +3,14 @@ import requests
 from flask import Flask, request
 from telegram import Bot
 from telegram.constants import ParseMode
+from telegram.request import HTTPXRequest
 from datetime import datetime, timedelta
 
-app = Flask(__name__)
-bot = Bot(token=os.environ["BOT_TOKEN"])
+app = Flask(name)
+
+# Синхронний бот через HTTPX
+request_ = HTTPXRequest()
+bot = Bot(token=os.environ["BOT_TOKEN"], request=request_)
 
 CITY_NAME = "Гайсин"
 LATITUDE = 48.8125
@@ -91,7 +95,6 @@ def index():
 def webhook():
     update = request.get_json()
 
-    # 🔎 Вивід у консоль для дебагу
     print("Отримано POST-запит:")
     print(update)
 
@@ -105,6 +108,6 @@ def webhook():
 
     return "ok"
 
-if __name__ == "__main__":
+if name == "main":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
