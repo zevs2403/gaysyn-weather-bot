@@ -1,16 +1,13 @@
 import os
+import asyncio
 import requests
 from flask import Flask, request
 from telegram import Bot
 from telegram.constants import ParseMode
-from telegram.request import HTTPXRequest
 from datetime import datetime, timedelta
 
-app = Flask(__name__)
-
-# Синхронний бот через HTTPX
-request_ = HTTPXRequest()
-bot = Bot(token=os.environ["BOT_TOKEN"], request=request_)
+app = Flask(name)
+bot = Bot(token=os.environ["BOT_TOKEN"])
 
 CITY_NAME = "Гайсин"
 LATITUDE = 48.8125
@@ -92,7 +89,7 @@ def index():
     return "Бот працює!"
 
 @app.route("/", methods=["POST"])
-def webhook():
+async def webhook():
     update = request.get_json()
 
     print("Отримано POST-запит:")
@@ -104,10 +101,10 @@ def webhook():
 
         if text.lower() in ["/start", "/weather", "погода"]:
             forecast = get_weather_forecast()
-            bot.send_message(chat_id=chat_id, text=forecast, parse_mode=ParseMode.HTML)
+            await bot.send_message(chat_id=chat_id, text=forecast, parse_mode=ParseMode.HTML)
 
     return "ok"
 
-if __name__ == "__main__":
+if name == "main":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
