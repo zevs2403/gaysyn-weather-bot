@@ -5,7 +5,7 @@ from telegram import Bot
 from telegram.constants import ParseMode
 from datetime import datetime, timedelta
 
-app = Flask(name)
+app = Flask(__name__)
 bot = Bot(token=os.environ["BOT_TOKEN"])
 
 CITY_NAME = "Гайсин"
