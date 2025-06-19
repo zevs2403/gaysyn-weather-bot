@@ -1,17 +1,16 @@
 import os
 import requests
+import asyncio
 import threading
 from flask import Flask, request
 from telegram import Bot
 from telegram.constants import ParseMode
-from telegram.utils.request import Request
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
-# Збільшуємо пул з’єднань для Telegram Bot API
-request = Request(con_pool_size=20)
-bot = Bot(token=os.environ["BOT_TOKEN"], request=request)
+# Асинхронний бот для PTB 20.7
+bot = Bot(token=os.environ["BOT_TOKEN"])
 
 CITY_NAME = "Гайсин"
 LATITUDE = 48.8125
@@ -89,13 +88,17 @@ def get_weather_forecast():
 
     return forecast_text.strip()
 
-def send_message_async(chat_id, text):
-    def job():
+def send_async_message(chat_id, text):
+    async def send():
         try:
-            bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
+            await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
         except Exception as e:
-            print(f"Помилка відправки повідомлення: {e}")
-    threading.Thread(target=job).start()
+            print(f"❌ Помилка відправки повідомлення: {e}")
+
+    def runner():
+        asyncio.run(send())
+
+    threading.Thread(target=runner).start()
 
 @app.route("/", methods=["GET"])
 def index():
@@ -104,7 +107,6 @@ def index():
 @app.route("/", methods=["POST"])
 def webhook():
     update = request.get_json()
-
     print("Отримано POST-запит:")
     print(update)
 
@@ -114,7 +116,7 @@ def webhook():
 
         if text.lower() in ["/start", "/weather", "погода"]:
             forecast = get_weather_forecast()
-            send_message_async(chat_id, forecast)
+            send_async_message(chat_id, forecast)
 
     return "ok"
 
