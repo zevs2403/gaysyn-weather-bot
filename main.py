@@ -88,7 +88,7 @@ def webhook():
 
         if text in ["/start", "/weather", "погода"]:
             forecast = get_weather_forecast()
-            asyncio.get_event_loop().create_task(send_forecast_async(chat_id, forecast))
+            asyncio.run(send_forecast_async(chat_id, forecast))
 
     return "ok"
 
