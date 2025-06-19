@@ -70,6 +70,7 @@ def get_weather_forecast():
 
     return forecast_text.strip()
 
+# Асинхронний відправник
 async def send_forecast_async(chat_id: int, text: str):
     await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
 
@@ -80,7 +81,7 @@ def index():
 @app.route("/", methods=["POST"])
 def webhook():
     update = request.get_json()
-    print("⚡ Отримано POST-запит:", update)
+    print("🔔 Отримано POST-запит:", update)
 
     if "message" in update and "text" in update["message"]:
         chat_id = update["message"]["chat"]["id"]
@@ -88,6 +89,7 @@ def webhook():
 
         if text in ["/start", "/weather", "погода"]:
             forecast = get_weather_forecast()
+            # ❗ ВАЖЛИВО: використовуємо asyncio.run для запуску async-функції у Flask
             asyncio.run(send_forecast_async(chat_id, forecast))
 
     return "ok"
