@@ -9,6 +9,10 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 bot = Bot(token=os.environ["BOT_TOKEN"])
 
+# 🔁 Створюємо глобальний event loop
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
 CITY_NAME = "Гайсин"
 LATITUDE = 48.8125
 LONGITUDE = 29.3903
@@ -70,7 +74,7 @@ def get_weather_forecast():
 
     return forecast_text.strip()
 
-# Асинхронний відправник
+# Асинхронна відправка повідомлень через спільний event loop
 async def send_forecast_async(chat_id: int, text: str):
     await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
 
@@ -89,8 +93,8 @@ def webhook():
 
         if text in ["/start", "/weather", "погода"]:
             forecast = get_weather_forecast()
-            # ❗ ВАЖЛИВО: використовуємо asyncio.run для запуску async-функції у Flask
-            asyncio.run(send_forecast_async(chat_id, forecast))
+            # Використовуємо глобальний loop замість asyncio.run
+            loop.create_task(send_forecast_async(chat_id, forecast))
 
     return "ok"
 
