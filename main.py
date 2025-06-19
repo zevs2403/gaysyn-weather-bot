@@ -1,6 +1,6 @@
 import os
-import requests
 import asyncio
+import requests
 from flask import Flask, request
 from telegram import Bot
 from telegram.constants import ParseMode
@@ -8,10 +8,6 @@ from datetime import datetime, timedelta
 
 app = Flask(__name__)
 bot = Bot(token=os.environ["BOT_TOKEN"])
-
-# 🔁 Створюємо глобальний event loop
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
 
 CITY_NAME = "Гайсин"
 LATITUDE = 48.8125
@@ -26,10 +22,12 @@ def get_weather_forecast():
         f"&hourly=wind_speed_10m,apparent_temperature,precipitation"
         f"&timezone={TIMEZONE}"
     )
+
     response = requests.get(url)
     data = response.json()
 
     forecast_text = f"🌤️ Прогноз погоди на 3 дні для {CITY_NAME}:\n\n"
+
     today = datetime.now().date()
     hourly_times = data["hourly"]["time"]
     hourly_wind = data["hourly"]["wind_speed_10m"]
@@ -42,19 +40,33 @@ def get_weather_forecast():
 
         max_temp = data["daily"]["temperature_2m_max"][i]
         min_temp = data["daily"]["temperature_2m_min"][i]
+        precipitation_hours = data["daily"]["precipitation_hours"][i]
 
         temp_info = f"🌡️ Вдень до {max_temp:.1f}°C, вночі {min_temp:.1f}°C"
         if min_temp <= -5:
-            index = hourly_times.index(f"{date}T00:00")
+            index = data["hourly"]["time"].index(f"{date}T00:00")
             feels_like = hourly_apparent[index]
             temp_info += f" (мороз, відчувається як {feels_like:.1f}°C)"
 
-        rain_hours = [hour[11:16] for j, hour in enumerate(hourly_times)
-                      if hour.startswith(str(date)) and hourly_precip[j] > 0]
-        rain_info = f"🌧️ Дощ: з {rain_hours[0]} до {rain_hours[-1]}" if rain_hours else "☀️ Дощ не очікується"
+        # Дощ
+        rain_hours = []
+        for j, hour in enumerate(hourly_times):
+            if hour.startswith(str(date)) and hourly_precip[j] > 0:
+                rain_hours.append(hour[11:16])
+        if rain_hours:
+            start = rain_hours[0]
+            end = rain_hours[-1]
+            rain_info = f"🌧️ Дощ: з {start} до {end}"
+        else:
+            rain_info = "☀️ Дощ не очікується"
 
-        strong_wind_hours = [int(hour[11:13]) for j, hour in enumerate(hourly_times)
-                             if hour.startswith(str(date)) and hourly_wind[j] > 4]
+        # Вітер
+        strong_wind_hours = []
+        for j, hour in enumerate(hourly_times):
+            if hour.startswith(str(date)) and hourly_wind[j] > 4:
+                strong_wind_hours.append(int(hour[11:13]))
+
+        wind_info = ""
         if strong_wind_hours:
             if any(6 <= h <= 11 for h in strong_wind_hours):
                 wind_info = "💨 Вдень — сильний вітер"
@@ -62,8 +74,6 @@ def get_weather_forecast():
                 wind_info = "💨 Ввечері — сильний вітер"
             else:
                 wind_info = "💨 Вночі — сильний вітер"
-        else:
-            wind_info = ""
 
         forecast_text += (
             f"<b>{day_str}</b>\n"
@@ -74,10 +84,6 @@ def get_weather_forecast():
 
     return forecast_text.strip()
 
-# Асинхронна відправка повідомлень через спільний event loop
-async def send_forecast_async(chat_id: int, text: str):
-    await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
-
 @app.route("/", methods=["GET"])
 def index():
     return "Бот працює!"
@@ -85,16 +91,20 @@ def index():
 @app.route("/", methods=["POST"])
 def webhook():
     update = request.get_json()
-    print("🔔 Отримано POST-запит:", update)
+
+    # Дебаг в консоль
+    print("Отримано POST-запит:")
+    print(update)
 
     if "message" in update and "text" in update["message"]:
         chat_id = update["message"]["chat"]["id"]
-        text = update["message"]["text"].lower()
+        text = update["message"]["text"]
 
-        if text in ["/start", "/weather", "погода"]:
+        if text.lower() in ["/start", "/weather", "погода"]:
             forecast = get_weather_forecast()
-            # Використовуємо глобальний loop замість asyncio.run
-            loop.create_task(send_forecast_async(chat_id, forecast))
+
+            # Надсилання через asyncio.run()
+            asyncio.run(bot.send_message(chat_id=chat_id, text=forecast, parse_mode=ParseMode.HTML))
 
     return "ok"
 
