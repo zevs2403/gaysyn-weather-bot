@@ -1,13 +1,17 @@
 import os
-import asyncio
 import requests
+import threading
 from flask import Flask, request
 from telegram import Bot
 from telegram.constants import ParseMode
+from telegram.utils.request import Request
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
-bot = Bot(token=os.environ["BOT_TOKEN"])
+
+# Збільшуємо пул з’єднань для Telegram Bot API
+request = Request(con_pool_size=20)
+bot = Bot(token=os.environ["BOT_TOKEN"], request=request)
 
 CITY_NAME = "Гайсин"
 LATITUDE = 48.8125
@@ -44,11 +48,13 @@ def get_weather_forecast():
 
         temp_info = f"🌡️ Вдень до {max_temp:.1f}°C, вночі {min_temp:.1f}°C"
         if min_temp <= -5:
-            index = data["hourly"]["time"].index(f"{date}T00:00")
-            feels_like = hourly_apparent[index]
-            temp_info += f" (мороз, відчувається як {feels_like:.1f}°C)"
+            try:
+                index = data["hourly"]["time"].index(f"{date}T00:00")
+                feels_like = hourly_apparent[index]
+                temp_info += f" (мороз, відчувається як {feels_like:.1f}°C)"
+            except ValueError:
+                pass
 
-        # Дощ
         rain_hours = []
         for j, hour in enumerate(hourly_times):
             if hour.startswith(str(date)) and hourly_precip[j] > 0:
@@ -60,7 +66,6 @@ def get_weather_forecast():
         else:
             rain_info = "☀️ Дощ не очікується"
 
-        # Вітер
         strong_wind_hours = []
         for j, hour in enumerate(hourly_times):
             if hour.startswith(str(date)) and hourly_wind[j] > 4:
@@ -84,6 +89,14 @@ def get_weather_forecast():
 
     return forecast_text.strip()
 
+def send_message_async(chat_id, text):
+    def job():
+        try:
+            bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            print(f"Помилка відправки повідомлення: {e}")
+    threading.Thread(target=job).start()
+
 @app.route("/", methods=["GET"])
 def index():
     return "Бот працює!"
@@ -92,7 +105,6 @@ def index():
 def webhook():
     update = request.get_json()
 
-    # Дебаг в консоль
     print("Отримано POST-запит:")
     print(update)
 
@@ -102,9 +114,7 @@ def webhook():
 
         if text.lower() in ["/start", "/weather", "погода"]:
             forecast = get_weather_forecast()
-
-            # Надсилання через asyncio.run()
-            asyncio.run(bot.send_message(chat_id=chat_id, text=forecast, parse_mode=ParseMode.HTML))
+            send_message_async(chat_id, forecast)
 
     return "ok"
 
